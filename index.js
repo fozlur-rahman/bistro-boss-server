@@ -1,13 +1,37 @@
 const express = require('express');
+const jwt = require('jsonwebtoken');
 const cors = require('cors');
+
 const app = express();
 const port = process.env.PORT || 5000;
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config()
 
 // middleware 
+
 app.use(express.json());
 app.use(cors());
+
+
+// // jwt 
+// const verifyJWT = (req, res, next) => {
+//     const authorization = req.headers.authorization;
+//     if (!authorization) {
+//         return res.status(401).send({ error: true, message: 'Unauthorized user user' });
+//     }
+
+//     // bearer user
+//     const token = authorization.split(' ')[1];
+//     jwt.verify(token, process.env.ACCESS_SECRET_TOKEN, (err, decoded) => {
+//         if (err) {
+//             console.error('JWT verification error:', err);
+//             return res.status(401).send({ error: true, message: 'Unauthorized user' });
+//         }
+//         console.log('Decoded email:', decoded.email);
+//         req.decoded = decoded;
+//         next();
+//     });
+// };
 
 
 
@@ -30,10 +54,115 @@ async function run() {
 
         // ==================================================================
 
+        const menuCollection = client.db("bistroBossDb").collection("menu");
+        const reviewsCollection = client.db("bistroBossDb").collection("reviews");
+        const cartsCollection = client.db("bistroBossDb").collection("carts");
+        const usersCollection = client.db("bistroBossDb").collection("users");
 
 
 
 
+        // jwt 
+        app.post('/jwt', async (req, res) => {
+            const user = req.body;
+            const token = jwt.sign({ email: user.email }, process.env.ACCESS_SECRET_TOKEN, { expiresIn: '1h' });
+            res.send({ token });
+        });
+
+
+        // create users 
+        app.post('/users', async (req, res) => {
+            const user = req.body;
+            const query = { email: user.email }
+            const isExisting = await usersCollection.findOne(query);
+            if (isExisting) {
+                return res.send({ 'ex': 'user already exist' })
+            }
+            const result = await usersCollection.insertOne(user);
+            res.send(result);
+        })
+        // get all users 
+        app.get('/users', async (req, res) => {
+            const result = await usersCollection.find().toArray();
+            res.send(result)
+        })
+        //  delte users 
+        app.delete('/users/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await usersCollection.deleteOne(query);
+            res.send(result);
+        })
+        // update users 
+        app.patch('/users/admin/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const updateDoc = {
+                $set: {
+                    role: 'admin'
+                }
+            }
+            const result = await usersCollection.updateOne(query, updateDoc);
+            res.send(result);
+        })
+
+        // admin role 
+        app.get('/users/admin/:email', async (req, res) => {
+            const email = req.params.email;
+            console.log(email)
+            const query = { email: email };
+            const user = await usersCollection.findOne(query);
+            const result = { admin: user.role === 'admin' };
+            res.send(result);
+        })
+
+
+
+
+
+
+
+
+
+        // find menu 
+        app.get('/menu', async (req, res) => {
+            const result = await menuCollection.find().toArray();
+            res.send(result);
+        })
+        // find reviews 
+        app.get('/reviews', async (req, res) => {
+            const result = await reviewsCollection.find().toArray();
+            res.send(result);
+
+        })
+
+
+        // add to cart 
+        app.post('/carts', async (req, res) => {
+            const query = req.body;
+            const result = await cartsCollection.insertOne(query);
+            res.send(result);
+        })
+
+        // find for cart data 
+        app.get('/carts', async (req, res) => {
+            const email = req.query.email;
+            if (!email) {
+                res.send([]);
+            }
+            const decodedEmail = req.decoded.email;
+            const query = { email: email };
+            const result = await cartsCollection.find(query).toArray();
+            res.send(result);
+        })
+
+        // delete carted item 
+        app.delete('/carts/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await cartsCollection.deleteOne(query);
+            res.send(result);
+        })
 
 
         // ==================================================================
