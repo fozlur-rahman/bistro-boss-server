@@ -1,6 +1,6 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
 const cors = require('cors');
+var jwt = require('jsonwebtoken');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -13,25 +13,23 @@ app.use(express.json());
 app.use(cors());
 
 
-// // jwt 
-// const verifyJWT = (req, res, next) => {
-//     const authorization = req.headers.authorization;
-//     if (!authorization) {
-//         return res.status(401).send({ error: true, message: 'Unauthorized user user' });
-//     }
 
-//     // bearer user
-//     const token = authorization.split(' ')[1];
-//     jwt.verify(token, process.env.ACCESS_SECRET_TOKEN, (err, decoded) => {
-//         if (err) {
-//             console.error('JWT verification error:', err);
-//             return res.status(401).send({ error: true, message: 'Unauthorized user' });
-//         }
-//         console.log('Decoded email:', decoded.email);
-//         req.decoded = decoded;
-//         next();
-//     });
-// };
+// jwt varify fucntion 
+const verifyJWT = (req, res, next) => {
+    const authorization = req.headers.authorization;
+    if (!authorization) {
+        return res.status(401).send({ error: true, message: 'unauthorization users' })
+    }
+    const token = authorization.split(' ')[1];
+
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+        if (err) {
+            return res.status(403).send({ err, message: 'unauthorized ' })
+        }
+        req.decoded = decoded;
+        next();
+    })
+}
 
 
 
@@ -62,12 +60,14 @@ async function run() {
 
 
 
-        // jwt 
-        app.post('/jwt', async (req, res) => {
+
+
+        //    CREATE jwt 
+        app.post('/jwt', (req, res) => {
             const user = req.body;
-            const token = jwt.sign({ email: user.email }, process.env.ACCESS_SECRET_TOKEN, { expiresIn: '1h' });
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
             res.send({ token });
-        });
+        })
 
 
         // create users 
@@ -106,15 +106,6 @@ async function run() {
             res.send(result);
         })
 
-        // admin role 
-        app.get('/users/admin/:email', async (req, res) => {
-            const email = req.params.email;
-            console.log(email)
-            const query = { email: email };
-            const user = await usersCollection.findOne(query);
-            const result = { admin: user.role === 'admin' };
-            res.send(result);
-        })
 
 
 
@@ -145,16 +136,27 @@ async function run() {
         })
 
         // find for cart data 
-        app.get('/carts', async (req, res) => {
+        // find for cart data 
+        app.get('/carts', verifyJWT, async (req, res) => {
             const email = req.query.email;
+            console.log(email)
             if (!email) {
                 res.send([]);
             }
+
             const decodedEmail = req.decoded.email;
-            const query = { email: email };
-            const result = await cartsCollection.find(query).toArray();
-            res.send(result);
+            console.log(decodedEmail, email)
+            if (email !== decodedEmail) {
+                return res.status(403).send({ message: 'forbidden access ' });
+            }
+            else {
+                const query = { email: email };
+                const result = await cartsCollection.find(query).toArray();
+                res.send(result);
+            }
+
         })
+
 
         // delete carted item 
         app.delete('/carts/:id', async (req, res) => {
