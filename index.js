@@ -148,6 +148,13 @@ async function run() {
             const result = await menuCollection.find().toArray();
             res.send(result);
         })
+
+        // add menu
+        app.post('/menu', verifyJWT, verifyAdmin, async (req, res) => {
+            const newMenu = req.body;
+            const result = await menuCollection.insertOne(newMenu);
+            res.send(result);
+        })
         // find reviews 
         app.get('/reviews', async (req, res) => {
             const result = await reviewsCollection.find().toArray();
