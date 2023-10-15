@@ -1,14 +1,14 @@
 const express = require('express');
 const cors = require('cors');
 var jwt = require('jsonwebtoken');
-
+require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-require('dotenv').config()
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
 
 // middleware 
-
 app.use(express.json());
 app.use(cors());
 
@@ -59,11 +59,11 @@ async function run() {
         const reviewsCollection = client.db("bistroBossDb").collection("reviews");
         const cartsCollection = client.db("bistroBossDb").collection("carts");
         const usersCollection = client.db("bistroBossDb").collection("users");
+        const paymentsCollection = client.db("bistroBossDb").collection("payments");
 
 
 
         //  isAdmin middleware 
-
         const verifyAdmin = async (req, res, next) => {
             const email = req.decoded.email;
             const query = { email: email };
@@ -75,6 +75,9 @@ async function run() {
                 next();
             }
         }
+
+
+
 
 
         //    CREATE jwt  
@@ -155,6 +158,15 @@ async function run() {
             const result = await menuCollection.insertOne(newMenu);
             res.send(result);
         })
+
+        // delete menu 
+        app.delete('/menu/:id', verifyJWT, verifyAdmin, async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await menuCollection.deleteOne(query);
+            res.send(result);
+        })
+
         // find reviews 
         app.get('/reviews', async (req, res) => {
             const result = await reviewsCollection.find().toArray();
@@ -173,13 +185,11 @@ async function run() {
         // find for cart data 
         app.get('/carts', verifyJWT, async (req, res) => {
             const email = req.query.email;
-            console.log(email)
             if (!email) {
                 res.send([]);
             }
 
             const decodedEmail = req.decoded.email;
-            console.log(decodedEmail, email)
             if (email !== decodedEmail) {
                 return res.status(403).send({ message: 'forbidden access ' });
             }
@@ -201,6 +211,38 @@ async function run() {
         })
 
 
+
+        // payment  intent
+        app.post('/create-payment-intent', verifyJWT, async (req, res) => {
+            const { price } = req.body;
+            const amount = price * 100;
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: "usd",
+                payment_method_types: ['card']
+            })
+            res.send({
+                clientSecret: paymentIntent.client_secret
+            })
+        })
+
+        // payment api for payment info insert in paymentCollection and delete cart ordered items
+        app.post('/payment', verifyJWT, async (req, res) => {
+            const payment = req.body;
+            const insertResult = await paymentsCollection.insertOne(payment);
+
+            const id = { _id: { $in: payment.cartItems.map(id => new ObjectId(id)) } };
+            const deletedResult = await cartsCollection.deleteMany(id);
+
+            res.send({ insertResult, deletedResult });
+        })
+        // display payment history 
+        app.get('/payment-history', async (req, res) => {
+            const email = req.query.email;
+            const query = { email: email };
+            const result = await paymentsCollection.find(query).toArray();
+            res.send(result);
+        })
         // ==================================================================
 
         // Send a ping to confirm a successful connection
